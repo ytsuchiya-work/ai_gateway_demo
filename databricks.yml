@@ -1,0 +1,38 @@
+# Unity AI Gateway ガバナンス比較デモ - Databricks Asset Bundle
+#
+# LLM/エージェントに対するガバナンスが Unity AI Gateway の有無でどう変わるかを
+# 視覚的に示すデモ。ダミーデータ・サービングエンドポイント・アプリを DAB で一括デプロイする。
+bundle:
+  name: ai_gateway_demo
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: "資産を作成するカタログ"
+    default: classic_stable_ytcy_catalog
+  schema:
+    description: "資産を作成するスキーマ"
+    default: ai_gateway_demo
+  warehouse_id:
+    description: "データ生成・ガードレール(ai_mask/ai_classify)実行に使う SQL Warehouse"
+    default: e351c2d1b16eae95
+  workspace_host:
+    description: "FM API プロキシ先のワークスペースホスト"
+    default: https://fevm-classic-stable-ytcy.cloud.databricks.com
+  secret_scope:
+    description: "FM API 呼び出し用 PAT を格納したシークレットスコープ"
+    default: ai_gateway_demo
+  base_model:
+    description: "両エンドポイントがプロキシする基盤モデル(pay-per-token)"
+    default: databricks-meta-llama-3-1-8b-instruct
+
+targets:
+  dev:
+    default: true
+    # mode は指定しない。development モードだと資産名に [dev user] プレフィックスが
+    # 付き、デモ表示が冗長になるため。名前はそのまま(ai-gw-demo-nogw 等)にする。
+    workspace:
+      profile: fe-vm-classic-stable-ytcy
+      host: https://fevm-classic-stable-ytcy.cloud.databricks.com

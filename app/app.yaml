@@ -1,0 +1,21 @@
+command:
+  - "python"
+  - "-m"
+  - "uvicorn"
+  - "app:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+
+env:
+  - name: DEMO_CATALOG
+    value: "classic_stable_ytcy_catalog"
+  - name: DEMO_SCHEMA
+    value: "ai_gateway_demo"
+  - name: DEMO_WAREHOUSE_ID
+    value: "e351c2d1b16eae95"
+  - name: NOGW_ENDPOINT
+    value: "ai-gw-demo-nogw"
+  - name: WITHGW_ENDPOINT
+    value: "ai-gw-demo-withgw"

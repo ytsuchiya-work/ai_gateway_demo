@@ -1,0 +1,51 @@
+resources:
+  model_serving_endpoints:
+    # ------------------------------------------------------------------
+    # (1) ガバナンスなし: Unity AI Gateway 未適用の "生" のLLMエンドポイント
+    #     監査ログなし / レート制限なし / ガードレールなし
+    # ------------------------------------------------------------------
+    nogw_endpoint:
+      name: ai-gw-demo-nogw
+      config:
+        served_entities:
+          - name: base-llm
+            external_model:
+              name: ${var.base_model}
+              provider: openai
+              task: llm/v1/chat
+              openai_config:
+                openai_api_base: ${var.workspace_host}/serving-endpoints
+                openai_api_key: "{{secrets/${var.secret_scope}/fm_api_token}}"
+
+    # ------------------------------------------------------------------
+    # (2) ガバナンスあり: Unity AI Gateway 適用済みエンドポイント
+    #     - usage tracking + inference table (自動監査ログ)
+    #     - rate limits (トラフィック制御: 5 calls/min)
+    #     ※ 入出力ガードレール(PIIマスク/安全性)は当リージョンで
+    #       llama-guard-internal が未提供のため、アプリ側で ai_mask /
+    #       ai_classify (Databricks AI Functions) により実装する。
+    # ------------------------------------------------------------------
+    withgw_endpoint:
+      name: ai-gw-demo-withgw
+      config:
+        served_entities:
+          - name: base-llm
+            external_model:
+              name: ${var.base_model}
+              provider: openai
+              task: llm/v1/chat
+              openai_config:
+                openai_api_base: ${var.workspace_host}/serving-endpoints
+                openai_api_key: "{{secrets/${var.secret_scope}/fm_api_token}}"
+      ai_gateway:
+        usage_tracking_config:
+          enabled: true
+        inference_table_config:
+          enabled: true
+          catalog_name: ${var.catalog}
+          schema_name: ${var.schema}
+          table_name_prefix: withgw_audit
+        rate_limits:
+          - calls: 10
+            renewal_period: minute
+            key: endpoint

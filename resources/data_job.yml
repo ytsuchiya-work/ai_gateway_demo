@@ -1,0 +1,14 @@
+resources:
+  jobs:
+    generate_data:
+      name: "[${bundle.target}] ai_gateway_demo データ生成"
+      tasks:
+        - task_key: generate_data
+          notebook_task:
+            notebook_path: ../src/notebooks/01_generate_data.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          # サーバーレスノートブックタスク (compute 指定なし)
+      queue:
+        enabled: true

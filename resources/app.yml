@@ -1,0 +1,6 @@
+resources:
+  apps:
+    ai_gateway_demo_app:
+      name: ai-gateway-demo
+      description: "Unity AI Gateway ガバナンス比較デモ (トグルでガバナンスの有無を切替)"
+      source_code_path: ../app
