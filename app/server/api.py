@@ -11,6 +11,7 @@
 安全性・PII・ジェイルブレイクはすべてゲートウェイのネイティブポリシーが担うため、
 アプリ層の ai_mask / ai_query は使用しない (完全ネイティブ)。
 """
+import os
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -38,6 +39,11 @@ def prompts():
     return [{"id": r[0], "category": r[1], "label": r[2], "text": r[3]} for r in rows]
 
 
+def _audit_log_url() -> str:
+    """AI Gateway 使用状況(監査ログ)システムテーブルの Catalog Explorer URL。"""
+    return f"{config.get_host()}/explore/data/system/ai_gateway/usage"
+
+
 @router.get("/config")
 def gateway_config():
     """エンドポイント構成の説明を返す (概要タブ用)。"""
@@ -50,6 +56,66 @@ def gateway_config():
             "rate_limit": True,
         },
         "gateway_route": config.gateway_url(),
+        "audit_log_url": _audit_log_url(),
+    }
+
+
+# トークンあたりの概算単価 (USD / 1K tokens)。デモ用の推定値。
+COST_PER_1K_USD = float(os.environ.get("USAGE_COST_PER_1K_USD", "0.002"))
+# system.ai_gateway.usage 上のデモ2エンドポイント絞り込み
+_USAGE_FILTER = "endpoint_name LIKE '%ai_gateway_demo.endpoint_%gw'"
+
+
+@router.get("/usage")
+def usage():
+    """system.ai_gateway.usage を集計して返す (使用状況タブ用)。"""
+    T = "system.ai_gateway.usage"
+    try:
+        s = run_sql(
+            f"""SELECT COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
+                       COALESCE(SUM(total_tokens),0)
+                FROM {T} WHERE {_USAGE_FILTER}"""
+        )[0]
+    except Exception as e:
+        return {"available": False, "error": str(e)[:300], "audit_log_url": _audit_log_url()}
+
+    total_tokens = int(s[3] or 0)
+    summary = {
+        "requests": int(s[0] or 0),
+        "input_tokens": int(s[1] or 0),
+        "output_tokens": int(s[2] or 0),
+        "total_tokens": total_tokens,
+        "est_cost_usd": round(total_tokens / 1000.0 * COST_PER_1K_USD, 4),
+    }
+
+    def agg(col: str):
+        rows = run_sql(
+            f"""SELECT COALESCE({col},'(不明)'), COUNT(*), COALESCE(SUM(total_tokens),0)
+                FROM {T} WHERE {_USAGE_FILTER} GROUP BY {col} ORDER BY COUNT(*) DESC LIMIT 20"""
+        )
+        return [{"key": r[0], "requests": int(r[1] or 0), "total_tokens": int(r[2] or 0)} for r in rows]
+
+    recent_rows = run_sql(
+        f"""SELECT CAST(event_time AS STRING), endpoint_name, requester, requester_type,
+                   COALESCE(destination_model,'-'), CAST(status_code AS STRING),
+                   COALESCE(total_tokens,0), COALESCE(latency_ms,0)
+            FROM {T} WHERE {_USAGE_FILTER} ORDER BY event_time DESC LIMIT 40"""
+    )
+    recent = [{
+        "event_time": r[0], "endpoint": (r[1] or "").split(".")[-1], "requester": r[2],
+        "requester_type": r[3], "model": r[4], "status_code": r[5],
+        "total_tokens": int(r[6] or 0), "latency_ms": int(r[7] or 0),
+    } for r in recent_rows]
+
+    return {
+        "available": True,
+        "summary": summary,
+        "cost_rate_per_1k": COST_PER_1K_USD,
+        "by_model": agg("destination_model"),
+        "by_requester": agg("requester"),
+        "by_endpoint": agg("endpoint_name"),
+        "recent": recent,
+        "audit_log_url": _audit_log_url(),
     }
 
 
@@ -146,7 +212,8 @@ def _chat_withgw(message: str) -> dict:
 
 @router.get("/audit")
 def audit_log():
-    return {"summary": audit.audit_summary(), "rows": audit.list_requests(50)}
+    return {"summary": audit.audit_summary(), "rows": audit.list_requests(50),
+            "audit_log_url": _audit_log_url()}
 
 
 # トラフィック制御デモ用の probe。全ガードレール(PII/有害/JB/hallucination)を通過し、

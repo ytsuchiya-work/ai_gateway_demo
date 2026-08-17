@@ -7,11 +7,13 @@ export default function Guardrails() {
   const [busy, setBusy] = useState(false);
   const [nogw, setNogw] = useState<ChatResp | null>(null);
   const [withgw, setWithgw] = useState<ChatResp | null>(null);
+  const [auditUrl, setAuditUrl] = useState("");
 
   useEffect(() => {
     api.prompts().then((p) => {
       setPrompts(p.filter((x) => x.category === "pii" || x.category === "unsafe" || x.category === "jailbreak"));
     });
+    api.config().then((c) => setAuditUrl(c?.audit_log_url || "")).catch(() => {});
   }, []);
 
   async function compare(text: string) {
@@ -66,14 +68,14 @@ export default function Guardrails() {
       </div>
 
       <div className="compare">
-        <Side title="⚠️ ガバナンスなし" cls="off" resp={nogw} raw={input} />
-        <Side title="🛡️ ガバナンスあり" cls="on" resp={withgw} raw={input} />
+        <Side title="⚠️ ガバナンスなし" cls="off" resp={nogw} raw={input} auditUrl={auditUrl} />
+        <Side title="🛡️ ガバナンスあり" cls="on" resp={withgw} raw={input} auditUrl={auditUrl} />
       </div>
     </div>
   );
 }
 
-function Side({ title, cls, resp, raw }: { title: string; cls: string; resp: ChatResp | null; raw: string }) {
+function Side({ title, cls, resp, raw, auditUrl }: { title: string; cls: string; resp: ChatResp | null; raw: string; auditUrl: string }) {
   const g = resp?.governance;
   return (
     <div className={`side ${cls}`}>
@@ -111,7 +113,13 @@ function Side({ title, cls, resp, raw }: { title: string; cls: string; resp: Cha
             <div className="step-lbl">④ 監査</div>
             <div className="step-box">
               {g?.enabled && g.logged ? (
-                <span className="pill blue">📋 記録済み {g.request_id}</span>
+                auditUrl ? (
+                  <a className="pill blue as-link" href={auditUrl} target="_blank" rel="noreferrer" title="ワークスペースの監査ログを開く">
+                    📋 記録済み {g.request_id} ↗
+                  </a>
+                ) : (
+                  <span className="pill blue">📋 記録済み {g.request_id}</span>
+                )
               ) : (
                 <span className="pill gray">記録なし</span>
               )}

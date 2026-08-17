@@ -5,6 +5,7 @@ import Audit from "./tabs/Audit";
 import Traffic from "./tabs/Traffic";
 import Guardrails from "./tabs/Guardrails";
 import Overview from "./tabs/Overview";
+import Usage from "./tabs/Usage";
 
 const TABS = [
   { id: "overview", label: "概要", icon: "🗺️" },
@@ -12,6 +13,7 @@ const TABS = [
   { id: "audit", label: "監査ログ", icon: "📋" },
   { id: "traffic", label: "トラフィック制御", icon: "🚦" },
   { id: "guardrails", label: "入出力管理", icon: "🛡️" },
+  { id: "usage", label: "使用状況", icon: "📊" },
 ] as const;
 
 export default function App() {
@@ -64,6 +66,7 @@ export default function App() {
         {tab === "traffic" && <Traffic mode={mode} setMode={setMode} />}
         {tab === "guardrails" && <Guardrails />}
         {tab === "overview" && <Overview />}
+        {tab === "usage" && <Usage />}
       </main>
     </div>
   );

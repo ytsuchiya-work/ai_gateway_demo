@@ -4,6 +4,7 @@ import { api, type AuditRow, type Mode } from "../api";
 export default function Audit({ mode }: { mode: Mode }) {
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [summary, setSummary] = useState({ withgw: 0, nogw: 0 });
+  const [auditUrl, setAuditUrl] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function load() {
@@ -12,6 +13,7 @@ export default function Audit({ mode }: { mode: Mode }) {
       const d = await api.audit();
       setRows(d.rows || []);
       setSummary(d.summary || { withgw: 0, nogw: 0 });
+      setAuditUrl(d.audit_log_url || "");
     } finally {
       setLoading(false);
     }
@@ -34,6 +36,11 @@ export default function Audit({ mode }: { mode: Mode }) {
             監査ログに自動記録されます。下表は現在のトグル状態
             (<b>{on ? "ガバナンスあり" : "ガバナンスなし"}</b>) のログです。ゲートウェイでブロックされた
             リクエストはモデルに到達しないため tok/遅延は「—」です。
+            {auditUrl && (
+              <> <a className="ext-link" href={auditUrl} target="_blank" rel="noreferrer">
+                ワークスペースの監査ログ (system.ai_gateway.usage) を開く ↗
+              </a></>
+            )}
           </p>
         </div>
         <button className="btn" onClick={load} disabled={loading}>
@@ -87,7 +94,13 @@ export default function Audit({ mode }: { mode: Mode }) {
                 return (
                   <tr key={r.request_id}>
                     <td className="mono">{r.ts?.slice(0, 19)}</td>
-                    <td className="mono">{r.request_id}</td>
+                    <td className="mono">
+                      {auditUrl ? (
+                        <a className="ext-link" href={auditUrl} target="_blank" rel="noreferrer" title="ワークスペースの監査ログを開く">
+                          {r.request_id} ↗
+                        </a>
+                      ) : r.request_id}
+                    </td>
                     <td>
                       <span className={`pill ${r.safety_verdict === "safe" ? "green" : "red"}`}>
                         {r.safety_verdict}

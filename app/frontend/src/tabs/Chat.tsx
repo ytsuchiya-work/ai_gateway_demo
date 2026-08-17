@@ -25,10 +25,12 @@ export default function Chat({ mode, setMode }: { mode: Mode; setMode: (m: Mode)
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [busy, setBusy] = useState(false);
+  const [auditUrl, setAuditUrl] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.prompts().then(setPrompts).catch(() => {});
+    api.config().then((c) => setAuditUrl(c?.audit_log_url || "")).catch(() => {});
   }, []);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -103,7 +105,7 @@ export default function Chat({ mode, setMode }: { mode: Mode; setMode: (m: Mode)
           {msgs.map((m, i) => (
             <div key={i} className={`bubble ${m.role}`}>
               <div className="bubble-body">{m.text}</div>
-              {m.role === "assistant" && m.resp && <Badges resp={m.resp} />}
+              {m.role === "assistant" && m.resp && <Badges resp={m.resp} auditUrl={auditUrl} />}
             </div>
           ))}
           {busy && (
@@ -131,7 +133,7 @@ export default function Chat({ mode, setMode }: { mode: Mode; setMode: (m: Mode)
   );
 }
 
-function Badges({ resp }: { resp: ChatResp }) {
+function Badges({ resp, auditUrl }: { resp: ChatResp; auditUrl: string }) {
   const g = resp.governance;
   const m = resp.metrics;
   if (!g?.enabled) {
@@ -153,7 +155,11 @@ function Badges({ resp }: { resp: ChatResp }) {
       ) : (
         <span className="badge green">✓ ガードレール通過</span>
       )}
-      {g.logged && <span className="badge blue">📋 監査記録: {g.request_id}</span>}
+      {g.logged && (auditUrl ? (
+        <a className="badge blue as-link" href={auditUrl} target="_blank" rel="noreferrer" title="ワークスペースの監査ログを開く">📋 監査記録: {g.request_id} ↗</a>
+      ) : (
+        <span className="badge blue">📋 監査記録: {g.request_id}</span>
+      ))}
       {m && m.latency_ms > 0 && <span className="badge dim">{m.latency_ms}ms · {m.output_tokens}tok</span>}
       {g.blocked && g.policy_reason && (
         <div className="policy-reason">検知理由: {g.policy_reason}</div>

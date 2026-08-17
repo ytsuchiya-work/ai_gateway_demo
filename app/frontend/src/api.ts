@@ -45,6 +45,23 @@ export interface AuditRow {
   latency_ms: number;
 }
 
+export interface UsageAgg { key: string; requests: number; total_tokens: number; }
+export interface UsageRecent {
+  event_time: string; endpoint: string; requester: string; requester_type: string;
+  model: string; status_code: string; total_tokens: number; latency_ms: number;
+}
+export interface UsageResp {
+  available: boolean;
+  error?: string;
+  audit_log_url: string;
+  cost_rate_per_1k?: number;
+  summary?: { requests: number; input_tokens: number; output_tokens: number; total_tokens: number; est_cost_usd: number };
+  by_model?: UsageAgg[];
+  by_requester?: UsageAgg[];
+  by_endpoint?: UsageAgg[];
+  recent?: UsageRecent[];
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   const r = await fetch(path, {
     method: "POST",
@@ -63,7 +80,8 @@ export const api = {
   chat: (mode: Mode, message: string) => post<ChatResp>("/api/chat", { mode, message }),
   prompts: () => get<Prompt[]>("/api/prompts"),
   config: () => get<any>("/api/config"),
-  audit: () => get<{ summary: { withgw: number; nogw: number }; rows: AuditRow[] }>("/api/audit"),
+  audit: () => get<{ summary: { withgw: number; nogw: number }; rows: AuditRow[]; audit_log_url: string }>("/api/audit"),
+  usage: () => get<UsageResp>("/api/usage"),
   rateTest: (mode: Mode, count: number) =>
     post<any>("/api/ratelimit-test", { mode, count }),
   rateOne: (mode: Mode) =>
