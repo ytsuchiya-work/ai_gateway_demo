@@ -48,8 +48,19 @@ def invoke(model: str, user_message: str) -> dict:
 
     if r.status_code == 429:
         raise RateLimited()
-    r.raise_for_status()
-    data = r.json()
+
+    # ボディを先にパースする。ガードレールのブロックや通常応答は 2xx で返るが、
+    # 念のためステータスに関わらず service policy / choices があればそれを採用する。
+    data = None
+    try:
+        data = r.json()
+    except Exception:
+        data = None
+
+    if not isinstance(data, dict) or not (data.get("databricks_service_policy") or data.get("choices")):
+        # 真のエラー。ボディを含めて分かりやすく送出する。
+        raise RuntimeError(f"gateway {r.status_code}: {r.text[:300]}")
+
     choice = (data.get("choices") or [{}])[0]
     content = choice.get("message", {}).get("content", "")
     usage = data.get("usage", {}) or {}
