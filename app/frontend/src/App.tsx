@@ -7,15 +7,15 @@ import Guardrails from "./tabs/Guardrails";
 import Overview from "./tabs/Overview";
 
 const TABS = [
+  { id: "overview", label: "概要", icon: "🗺️" },
   { id: "chat", label: "チャット", icon: "💬" },
   { id: "audit", label: "監査ログ", icon: "📋" },
   { id: "traffic", label: "トラフィック制御", icon: "🚦" },
   { id: "guardrails", label: "入出力管理", icon: "🛡️" },
-  { id: "overview", label: "概要", icon: "🗺️" },
 ] as const;
 
 export default function App() {
-  const [tab, setTab] = useState<string>("chat");
+  const [tab, setTab] = useState<string>("overview");
   const [mode, setMode] = useState<Mode>("nogw");
   const on = mode === "withgw";
 
