@@ -10,7 +10,7 @@ export default function Traffic({ mode, setMode }: { mode: Mode; setMode: (m: Mo
     setRunning(true);
     setRes(null);
     try {
-      setRes(await api.rateTest(mode, 15));
+      setRes(await api.rateTest(mode, 20));
     } finally {
       setRunning(false);
     }
@@ -23,7 +23,7 @@ export default function Traffic({ mode, setMode }: { mode: Mode; setMode: (m: Mo
           <h2>トラフィック制御 (レート制限)</h2>
           <p className="muted">
             AI Gateway の rate limit により、ガバナンス有効時のエンドポイントは
-            <b> 10回/分</b> に制限されています。15回連続で呼び出し、超過分が
+            <b> 5回/分</b> に制限されています。20回連続で呼び出し、超過分が
             <b> HTTP 429</b> で拒否される様子を確認します。ガバナンスなしのエンドポイントは無制限です。
           </p>
         </div>
@@ -37,7 +37,7 @@ export default function Traffic({ mode, setMode }: { mode: Mode; setMode: (m: Mo
         </div>
         <div className={`cfg-card ${on ? "active" : "dim"}`}>
           <h4>ガバナンスあり <code>ai-gw-demo-withgw</code></h4>
-          <div className="cfg-val">レート制限: <b>10 calls / minute</b></div>
+          <div className="cfg-val">レート制限: <b>5 calls / minute</b></div>
           <p>超過リクエストは自動的に 429 で拒否。悪用・暴走を抑制</p>
         </div>
       </div>
@@ -48,7 +48,7 @@ export default function Traffic({ mode, setMode }: { mode: Mode; setMode: (m: Mo
           <button className={`seg-btn ${on ? "sel" : ""}`} onClick={() => setMode("withgw")}>ガバナンスあり</button>
         </div>
         <button className="btn primary" onClick={run} disabled={running}>
-          {running ? "実行中…" : "▶ 15回連続で呼び出し"}
+          {running ? "実行中…" : "▶ 20回連続で呼び出し"}
         </button>
       </div>
 
@@ -72,7 +72,7 @@ export default function Traffic({ mode, setMode }: { mode: Mode; setMode: (m: Mo
           </div>
           <p className="muted">
             {on
-              ? "10回を超えたリクエストが 429 で拒否されました。これが AI Gateway のトラフィック制御です。"
+              ? "上限(5回/分)を超えたリクエストが 429 で拒否されました。これが AI Gateway のトラフィック制御です(分散カウンタのため上限付近は多少前後します)。"
               : "全リクエストが成功しました。ガバナンスなしでは制限がかからず、コストや悪用のリスクが残ります。"}
           </p>
         </div>

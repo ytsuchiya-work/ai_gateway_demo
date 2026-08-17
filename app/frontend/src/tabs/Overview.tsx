@@ -52,7 +52,7 @@ export default function Overview() {
         </thead>
         <tbody>
           <tr><td>監査性 (誰が/何を/いつ)</td><td className="no">✗ 追跡不能</td><td className="yes">✓ Inference Table に自動記録</td></tr>
-          <tr><td>トラフィック制御</td><td className="no">✗ 無制限</td><td className="yes">✓ レート制限 (10回/分)</td></tr>
+          <tr><td>トラフィック制御</td><td className="no">✗ 無制限</td><td className="yes">✓ レート制限 (5回/分)</td></tr>
           <tr><td>入力の PII 保護</td><td className="no">✗ 素通り</td><td className="yes">✓ ai_mask でマスク</td></tr>
           <tr><td>安全性 / インジェクション</td><td className="no">✗ 無防備</td><td className="yes">✓ ai_query でブロック</td></tr>
           <tr><td>出力の PII 漏洩防止</td><td className="no">✗ そのまま返却</td><td className="yes">✓ 出力もマスク</td></tr>

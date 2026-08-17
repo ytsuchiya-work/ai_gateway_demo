@@ -46,6 +46,6 @@ resources:
           schema_name: ${var.schema}
           table_name_prefix: withgw_audit
         rate_limits:
-          - calls: 10
+          - calls: 5
             renewal_period: minute
             key: endpoint

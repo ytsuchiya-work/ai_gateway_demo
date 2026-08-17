@@ -155,6 +155,8 @@ h3 { font-size: 15px; margin: 22px 0 10px; }
 /* ---------- Audit ---------- */
 .stat-row { display: flex; gap: 14px; margin-bottom: 18px; }
 .stat { flex: 1; border-radius: 12px; padding: 16px 18px; display: flex; align-items: center; gap: 16px; border: 1px solid var(--line); }
+.stat.faded { opacity: 0.4; }
+.note-inline { color: var(--muted); font-size: 11px; }
 .stat.on { background: var(--green-bg); border-color: #bfe6d8; }
 .stat.off { background: var(--red-bg); border-color: #f0d3ce; }
 .stat-num { font-size: 34px; font-weight: 800; line-height: 1; }

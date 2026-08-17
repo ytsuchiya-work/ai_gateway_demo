@@ -65,7 +65,7 @@ export default function Chat({ mode, setMode }: { mode: Mode; setMode: (m: Mode)
           <div className="mb-head">{on ? "🛡️ ガバナンスあり" : "⚠️ ガバナンスなし"}</div>
           <ul>
             <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} 監査ログ (自動記録)</li>
-            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} レート制限 (10回/分)</li>
+            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} レート制限 (5回/分)</li>
             <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} PIIマスク (入出力)</li>
             <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} 安全性フィルタ</li>
           </ul>
@@ -146,7 +146,10 @@ function Badges({ resp }: { resp: ChatResp }) {
   return (
     <div className="badges">
       {g.blocked ? (
-        <span className="badge red">⛔ ブロック ({g.safety_verdict})</span>
+        <>
+          <span className="badge red">⛔ ブロック ({g.safety_verdict})</span>
+          <span className="badge dim">モデル未実行 (0 tok)</span>
+        </>
       ) : (
         <span className="badge green">✓ 安全性: {g.safety_verdict}</span>
       )}

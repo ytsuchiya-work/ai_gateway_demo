@@ -21,6 +21,8 @@ export default function Audit({ mode }: { mode: Mode }) {
   }, []);
 
   const on = mode === "withgw";
+  // 現在のトグル(GWのON/OFF)に対応するログだけを表示する
+  const visible = rows.filter((r) => r.mode === mode);
 
   return (
     <div className="panel">
@@ -29,8 +31,9 @@ export default function Audit({ mode }: { mode: Mode }) {
           <h2>監査ログ (Audit Trail)</h2>
           <p className="muted">
             AI Gateway の usage tracking により、ガバナンス有効時は全リクエストが自動で
-            Inference Table に記録されます。下表はアプリが記録したライブ監査ログです
-            (プラットフォーム側の <code>ai_gateway_demo.withgw_audit_payload</code> にも同時に蓄積)。
+            Inference Table に記録されます。下表は現在のトグル状態
+            (<b>{on ? "ガバナンスあり" : "ガバナンスなし"}</b>) のログを表示しています。
+            ブロックされたリクエストはモデルに到達しないため tok/遅延は「—」です。
           </p>
         </div>
         <button className="btn" onClick={load} disabled={loading}>
@@ -39,27 +42,29 @@ export default function Audit({ mode }: { mode: Mode }) {
       </div>
 
       <div className="stat-row">
-        <div className="stat on">
+        <div className={`stat on ${on ? "" : "faded"}`}>
           <div className="stat-num">{summary.withgw}</div>
           <div className="stat-lbl">ガバナンスあり<br />記録件数</div>
         </div>
-        <div className="stat off">
+        <div className={`stat off ${on ? "faded" : ""}`}>
           <div className="stat-num">{summary.nogw}</div>
           <div className="stat-lbl">ガバナンスなし<br />記録件数</div>
         </div>
       </div>
 
-      {!on && (
+      {!on ? (
         <div className="notice warn">
-          現在 <b>ガバナンスなし</b> モードです。この状態のリクエストは
-          <b> 一切記録されません</b>（監査証跡が残らない = 誰が・何を・いつ問い合わせたか追跡不能）。
-          上部トグルで有効化すると、以降のリクエストが下表に記録されます。
+          現在 <b>ガバナンスなし (GW OFF)</b> です。この状態のリクエストは
+          <b> 一切記録されません</b>（誰が・何を・いつ問い合わせたか追跡不能）。
+          上部トグルを ON にすると、以降のリクエストが監査ログに記録されます。
         </div>
-      )}
+      ) : null}
 
-      {rows.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="empty">
-          監査ログはまだありません。チャットタブで <b>ガバナンスあり</b> にして質問すると記録されます。
+          {on
+            ? "ガバナンスありの監査ログはまだありません。チャットタブで質問すると記録されます。"
+            : "ガバナンスなし(GW OFF)では監査ログは記録されません。"}
         </div>
       ) : (
         <div className="table-scroll">
@@ -77,26 +82,32 @@ export default function Audit({ mode }: { mode: Mode }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.request_id}>
-                  <td className="mono">{r.ts?.slice(0, 19)}</td>
-                  <td className="mono">{r.request_id}</td>
-                  <td>
-                    <span className={`pill ${r.safety_verdict === "safe" ? "green" : "red"}`}>
-                      {r.safety_verdict}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`pill ${r.action === "blocked" ? "red" : r.action === "masked" ? "amber" : "gray"}`}>
-                      {r.action}
-                    </span>
-                  </td>
-                  <td className="cell-clip">{r.masked_input}</td>
-                  <td className="cell-clip">{r.model_output}</td>
-                  <td className="mono">{r.input_tokens}/{r.output_tokens}</td>
-                  <td className="mono">{r.latency_ms}ms</td>
-                </tr>
-              ))}
+              {visible.map((r) => {
+                const blocked = r.action === "blocked";
+                return (
+                  <tr key={r.request_id}>
+                    <td className="mono">{r.ts?.slice(0, 19)}</td>
+                    <td className="mono">{r.request_id}</td>
+                    <td>
+                      <span className={`pill ${r.safety_verdict === "safe" ? "green" : "red"}`}>
+                        {r.safety_verdict}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`pill ${blocked ? "red" : r.action === "masked" ? "amber" : "gray"}`}>
+                        {r.action}
+                      </span>
+                    </td>
+                    <td className="cell-clip">{r.masked_input}</td>
+                    <td className="cell-clip">
+                      {r.model_output}
+                      {blocked && <span className="note-inline"> (モデル未実行)</span>}
+                    </td>
+                    <td className="mono">{blocked ? "—" : `${r.input_tokens}/${r.output_tokens}`}</td>
+                    <td className="mono">{blocked ? "—" : `${r.latency_ms}ms`}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
