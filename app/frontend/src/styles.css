@@ -144,6 +144,7 @@ h3 { font-size: 15px; margin: 22px 0 10px; }
 .badge.blue { background: var(--blue-bg); color: var(--blue); }
 .badge.gray { background: var(--gray-bg); color: var(--gray); }
 .badge.dim { background: transparent; color: var(--muted); font-weight: 500; }
+.policy-reason { width: 100%; font-size: 11.5px; color: var(--red); margin-top: 6px; background: var(--red-bg); padding: 7px 10px; border-radius: 8px; line-height: 1.45; }
 
 .composer { display: flex; gap: 10px; padding: 14px; border-top: 1px solid var(--line); background: #fafbfb; }
 .composer.wide { border: 1px solid var(--line); border-radius: 12px; margin: 14px 0 20px; background: #fff; }

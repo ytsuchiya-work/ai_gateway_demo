@@ -4,6 +4,8 @@ export interface Governance {
   enabled: boolean;
   safety_verdict?: string;
   blocked?: boolean;
+  policy_name?: string | null;
+  policy_reason?: string | null;
   pii_input_masked?: boolean;
   pii_output_masked?: boolean;
   masked_input?: string;

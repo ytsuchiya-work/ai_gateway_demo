@@ -35,9 +35,10 @@ export default function Guardrails() {
         <div>
           <h2>入出力管理 (ガードレール)</h2>
           <p className="muted">
-            同じ入力を <b>ガバナンスなし</b> と <b>ガバナンスあり</b> の両方へ同時送信し、
-            PIIマスク・安全性ブロックの違いを並べて比較します。ガードレールは Databricks の
-            <code> ai_mask</code> / <code>ai_query</code> で実装しています。
+            同じ入力を <b>ガバナンスなし(endpoint_no_gw)</b> と <b>ガバナンスあり(endpoint_with_gw)</b>
+            の両方へ同時送信し、違いを並べて比較します。安全性・ジェイルブレイクは
+            <b>AI Gateway のネイティブ・ガードレール(service policy)</b> がブロックし、
+            PII は <code>ai_mask</code> で補完的にマスクします。
           </p>
         </div>
       </div>
@@ -94,16 +95,19 @@ function Side({ title, cls, resp, raw }: { title: string; cls: string; resp: Cha
             </div>
           </div>
           <div className="step">
-            <div className="step-lbl">② 安全性チェック</div>
+            <div className="step-lbl">② ゲートウェイ・ガードレール</div>
             <div className="step-box">
               {g?.enabled ? (
                 g.blocked ? (
-                  <span className="pill red">⛔ ブロック ({g.safety_verdict})</span>
+                  <>
+                    <span className="pill red">⛔ ブロック ({g.policy_name || g.safety_verdict})</span>
+                    {g.policy_reason && <div className="policy-reason">検知理由: {g.policy_reason}</div>}
+                  </>
                 ) : (
-                  <span className="pill green">✓ {g.safety_verdict}</span>
+                  <span className="pill green">✓ ガードレール通過</span>
                 )
               ) : (
-                <span className="pill gray">チェックなし (素通り)</span>
+                <span className="pill gray">ガードレールなし (モデル任せ)</span>
               )}
             </div>
           </div>

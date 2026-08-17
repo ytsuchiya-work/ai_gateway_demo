@@ -1,4 +1,12 @@
-"""デモ API ルーター。"""
+"""デモ API ルーター。
+
+ガバナンスあり = Unity AI Gateway エンドポイント endpoint_with_gw
+  - ネイティブ service policy ガードレール (安全性 gurdrail_unsafe_content /
+    ジェイルブレイク gurdrail_jail_break) がゲートウェイでブロック
+  - レート制限もゲートウェイで適用
+  - PII マスクはアプリ層の ai_mask で補完
+ガバナンスなし = endpoint_no_gw (ガードレール・レート制限なし)
+"""
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -6,13 +14,6 @@ from . import config, llm, guardrails, audit
 from .sql import run_sql
 
 router = APIRouter()
-
-BLOCK_MESSAGE = (
-    "申し訳ございませんが、そのご要望にはお答えできません。"
-    "AI Gateway のガードレールにより、安全性ポリシー違反の可能性がある入力として"
-    "ブロックされました。"
-)
-UNSAFE = guardrails.BLOCK_VERDICTS  # {"harmful", "jailbreak"}
 
 
 class ChatReq(BaseModel):
@@ -30,44 +31,22 @@ def prompts():
     rows = run_sql(
         f"SELECT prompt_id, category, label, prompt_text FROM {config.FQN}.test_prompts ORDER BY prompt_id"
     )
-    return [
-        {"id": r[0], "category": r[1], "label": r[2], "text": r[3]} for r in rows
-    ]
+    return [{"id": r[0], "category": r[1], "label": r[2], "text": r[3]} for r in rows]
 
 
 @router.get("/config")
 def gateway_config():
-    """両エンドポイントの AI Gateway 構成を返す (概要タブ用)。"""
-    w = config.get_client()
-
-    def summarize(name: str) -> dict:
-        try:
-            ep = w.serving_endpoints.get(name)
-            gw = ep.ai_gateway
-            if not gw:
-                return {"name": name, "has_gateway": False}
-            rl = gw.rate_limits[0] if gw.rate_limits else None
-            rl_period = getattr(rl.renewal_period, "value", rl.renewal_period) if rl else None
-            it = gw.inference_table_config
-            return {
-                "name": name,
-                "has_gateway": True,
-                "usage_tracking": bool(gw.usage_tracking_config and gw.usage_tracking_config.enabled),
-                "inference_table": (f"{it.catalog_name}.{it.schema_name}.{it.table_name_prefix}_payload"
-                                    if it and it.enabled else None),
-                "rate_limit": (f"{rl.calls} calls / {rl_period}" if rl else None),
-            }
-        except Exception as e:
-            return {"name": name, "has_gateway": False, "error": str(e)}
-
+    """エンドポイント構成の説明を返す (概要タブ用)。"""
     return {
-        "nogw": summarize(config.NOGW_ENDPOINT),
-        "withgw": summarize(config.WITHGW_ENDPOINT),
-        # ガードレールはアプリ層 (ai_mask / ai_classify) で withgw のみ適用
-        "guardrails": {
-            "pii_mask": "ai_mask (person/phone/card/email/address)",
-            "safety": "ai_query (safe / harmful / jailbreak)",
+        "nogw": {"name": config.NOGW_MODEL, "has_gateway": False},
+        "withgw": {
+            "name": config.WITHGW_MODEL,
+            "has_gateway": True,
+            "guardrails": ["gurdrail_unsafe_content", "gurdrail_jail_break"],
+            "rate_limit": True,
+            "pii_mask": "ai_mask (アプリ層で補完)",
         },
+        "gateway_route": config.gateway_url(),
     }
 
 
@@ -79,14 +58,14 @@ def chat(req: ChatReq):
 
 
 def _chat_nogw(message: str) -> dict:
-    """ガバナンスなし: ガードレール・監査・レート制限なしで生のLLMを呼ぶ。"""
+    """ガバナンスなし: ガードレール・監査・レート制限なしで生のエンドポイントを呼ぶ。"""
     try:
-        res = llm.invoke(config.NOGW_ENDPOINT, message)
+        res = llm.invoke(config.NOGW_MODEL, message)
     except llm.RateLimited:
         return {"rate_limited": True, "mode": "nogw"}
     return {
         "mode": "nogw",
-        "endpoint": config.NOGW_ENDPOINT,
+        "endpoint": config.NOGW_MODEL,
         "response": res["content"],
         "rate_limited": False,
         "governance": {"enabled": False},
@@ -99,38 +78,45 @@ def _chat_nogw(message: str) -> dict:
 
 
 def _chat_withgw(message: str) -> dict:
-    """ガバナンスあり: 入力ガードレール → LLM → 出力ガードレール → 監査記録。"""
-    gin = guardrails.check_input(message)
-    verdict = gin["verdict"]
-    blocked = verdict in UNSAFE
+    """ガバナンスあり: PIIマスク(ai_mask) → ゲートウェイ(ネイティブガードレール) → 出力マスク → 監査。"""
+    # 入力 PII マスク (ai_mask)
+    gin = guardrails.mask_text(message)
+    llm_input = gin["masked_text"] if gin["pii_detected"] else message
+
+    try:
+        res = llm.invoke(config.WITHGW_MODEL, llm_input)
+    except llm.RateLimited:
+        return {"rate_limited": True, "mode": "withgw"}
+
+    policy = res.get("policy")
+    blocked = res.get("blocked")
 
     if blocked:
-        response = BLOCK_MESSAGE
+        pname = (policy or {}).get("name", "guardrail")
+        preason = (policy or {}).get("reason", "")
+        response = f"⛔ AI Gateway のガードレール『{pname}』によりブロックされました。"
         masked_out_flag = False
-        metrics = {"input_tokens": 0, "output_tokens": 0, "latency_ms": 0}
+        verdict = pname
         action = "blocked"
     else:
-        llm_input = gin["masked_text"] if gin["pii_detected"] else message
-        try:
-            res = llm.invoke(config.WITHGW_ENDPOINT, llm_input)
-        except llm.RateLimited:
-            return {"rate_limited": True, "mode": "withgw"}
-        gout = guardrails.mask_output(res["content"])
+        gout = guardrails.mask_text(res["content"])
         response = gout["masked_text"]
         masked_out_flag = gout["pii_detected"]
-        metrics = {
-            "input_tokens": res["input_tokens"],
-            "output_tokens": res["output_tokens"],
-            "latency_ms": res["latency_ms"],
-        }
+        verdict = "safe"
+        preason = ""
         action = "masked" if (gin["pii_detected"] or masked_out_flag) else "allowed"
 
-    # 監査記録 (withgw のみ)
+    metrics = {
+        "input_tokens": res["input_tokens"],
+        "output_tokens": res["output_tokens"],
+        "latency_ms": res["latency_ms"],
+    }
+
     request_id = None
     try:
         request_id = audit.log_request({
             "mode": "withgw",
-            "endpoint": config.WITHGW_ENDPOINT,
+            "endpoint": config.WITHGW_MODEL.split(".")[-1],
             "user_input": message,
             "masked_input": gin["masked_text"],
             "safety_verdict": verdict,
@@ -145,13 +131,15 @@ def _chat_withgw(message: str) -> dict:
 
     return {
         "mode": "withgw",
-        "endpoint": config.WITHGW_ENDPOINT,
+        "endpoint": config.WITHGW_MODEL,
         "response": response,
         "rate_limited": False,
         "governance": {
             "enabled": True,
             "safety_verdict": verdict,
             "blocked": blocked,
+            "policy_name": (policy or {}).get("name") if blocked else None,
+            "policy_reason": preason if blocked else None,
             "pii_input_masked": gin["pii_detected"],
             "pii_output_masked": masked_out_flag,
             "masked_input": gin["masked_text"],
@@ -170,16 +158,16 @@ def audit_log():
 
 class RateReq(BaseModel):
     mode: str
-    count: int = 10
+    count: int = 20
 
 
 @router.post("/ratelimit-test")
 def ratelimit_test(req: RateReq):
-    ep = config.WITHGW_ENDPOINT if req.mode == "withgw" else config.NOGW_ENDPOINT
+    model = config.WITHGW_MODEL if req.mode == "withgw" else config.NOGW_MODEL
     results = []
     ok = rl = other = 0
-    for i in range(min(req.count, 20)):
-        code = llm.invoke_status(ep, "ping")
+    for i in range(min(req.count, 25)):
+        code = llm.invoke_status(model)
         results.append({"i": i + 1, "code": code})
         if code == 200:
             ok += 1
@@ -187,5 +175,5 @@ def ratelimit_test(req: RateReq):
             rl += 1
         else:
             other += 1
-    return {"mode": req.mode, "endpoint": ep, "ok": ok, "rate_limited": rl,
+    return {"mode": req.mode, "endpoint": model, "ok": ok, "rate_limited": rl,
             "other": other, "results": results}

@@ -30,10 +30,10 @@ export default function Audit({ mode }: { mode: Mode }) {
         <div>
           <h2>監査ログ (Audit Trail)</h2>
           <p className="muted">
-            AI Gateway の usage tracking により、ガバナンス有効時は全リクエストが自動で
-            Inference Table に記録されます。下表は現在のトグル状態
-            (<b>{on ? "ガバナンスあり" : "ガバナンスなし"}</b>) のログを表示しています。
-            ブロックされたリクエストはモデルに到達しないため tok/遅延は「—」です。
+            ガバナンス有効時は各リクエスト(入力・ガードレール判定・応答・トークン・遅延)が
+            監査ログに自動記録されます。下表は現在のトグル状態
+            (<b>{on ? "ガバナンスあり" : "ガバナンスなし"}</b>) のログです。ゲートウェイでブロックされた
+            リクエストはモデルに到達しないため tok/遅延は「—」です。
           </p>
         </div>
         <button className="btn" onClick={load} disabled={loading}>

@@ -17,13 +17,17 @@ LLM / エージェントに対するガバナンスが **Unity AI Gateway の有
 
 ## デモで見せられること
 
-| 観点 | ガバナンスなし (`ai-gw-demo-nogw`) | ガバナンスあり (`ai-gw-demo-withgw`) |
+| 観点 | ガバナンスなし (`endpoint_no_gw`) | ガバナンスあり (`endpoint_with_gw`) |
 |---|---|---|
-| **監査性** | 記録なし・追跡不能 | 全リクエストを自動記録 (Inference Table + アプリ監査ログ) |
-| **トラフィック制御** | 無制限 | レート制限 10 回/分 → 超過は HTTP 429 |
-| **入力の PII 保護** | 素通り | `ai_mask` で氏名/電話/カード/メール/住所をマスク |
-| **安全性 / インジェクション** | 無防備 | `ai_query` で harmful / jailbreak をブロック |
-| **出力の PII 漏洩防止** | そのまま返却 | 出力も `ai_mask` でマスク |
+| **安全性 (有害コンテンツ)** | モデル任せ（不確実） | AI Gateway ネイティブ・ガードレール `gurdrail_unsafe_content` でブロック |
+| **ジェイルブレイク/インジェクション** | モデル任せ | ネイティブ・ガードレール `gurdrail_jail_break` でブロック |
+| **トラフィック制御** | 無制限 | AI Gateway レート制限 → 超過は HTTP 429 |
+| **PII 保護 (入出力)** | 素通り | `ai_mask` で氏名/電話/カード/メール/住所をマスク（補完） |
+| **監査性** | 記録なし・追跡不能 | 全リクエスト(入力/判定/応答/tok/遅延)を監査ログに自動記録 |
+
+> 安全性・ジェイルブレイクは **AI Gateway のネイティブ service policy** がゲートウェイでブロックします
+> (ブロック時は `finish_reason=content_filter` と `databricks_service_policy{name,reason}` が返る)。
+> PII マスクはこれらのポリシーが対象外のため、Databricks AI Function `ai_mask` で補完します。
 
 ### 画面（5 タブ）
 1. **チャット** — トグルで挙動比較。応答にガードレール判定バッジ（安全性・PIIマスク・監査記録）を表示。
@@ -39,32 +43,33 @@ LLM / エージェントに対するガバナンスが **Unity AI Gateway の有
 ```
 アプリ (React + FastAPI, Databricks Apps)
    │  mode トグル
-   ├─ nogw  → ai-gw-demo-nogw  (external_model) ─┐
-   │                                             ├─→ FM API: databricks-meta-llama-3-1-8b-instruct
-   └─ withgw→ ai-gw-demo-withgw (external_model) ─┘   (OpenAI互換プロキシ / PAT はシークレット)
-                    │
-                    ├─ AI Gateway: usage tracking → Inference Table (withgw_audit_payload)
-                    └─ AI Gateway: rate limit 10/min
-   withgw のガードレール (アプリ層):
-     ├─ ai_mask     … 入力/出力の PII マスク
-     └─ ai_query    … 安全性分類 (safe / harmful / jailbreak) → harmful,jailbreak をブロック
+   │   AI Gateway 統合ルート: {host}/ai-gateway/mlflow/v1/chat/completions
+   │   model = カタログ修飾名
+   ├─ nogw  → classic_stable_ytcy_catalog.ai_gateway_demo.endpoint_no_gw   (ガードレール/制限なし)
+   └─ withgw→ classic_stable_ytcy_catalog.ai_gateway_demo.endpoint_with_gw
+                    ├─ ネイティブ service policy: gurdrail_unsafe_content / gurdrail_jail_break
+                    └─ レート制限 (AI Gateway)
+   withgw の PII マスク (アプリ層で補完):
+     └─ ai_mask   … 入力/出力の PII マスク (氏名/電話/カード/メール/住所)
+   監査: withgw の各リクエストを app_request_log に記録
 ```
 
-### 設計上のポイント / 制約
-- **エンドポイントは `external_model` 型**で、ワークスペース自身の Foundation Model API
-  (pay-per-token, OpenAI 互換) をプロキシします。認証には PAT をシークレット
-  `ai_gateway_demo/fm_api_token` に格納して使用。**専用 GPU 不要・外部キー不要**で、
-  課金は pay-per-token の実使用分のみ。
-- **リクエストに `max_tokens` は送らない**こと。external_model(provider=openai) が内部で
-  `max_completion_tokens` に変換し、FM API が拒否するため。出力長はシステムプロンプトで制御。
-- **入出力ガードレールはアプリ層で実装**しています。当ワークスペース（東京リージョン）では
-  AI Gateway ネイティブ guardrails のバックエンド `llama-guard-internal` が
-  データレジデンシー制約で利用不可のためです（PII/safety いずれも）。代替として
-  UC 管理下・監査可能な Databricks AI Functions（`ai_mask` / `ai_query`）を SQL Warehouse
-  経由で呼び出しています。**監査（Inference Table）とレート制限は AI Gateway のネイティブ機能**
-  をそのまま使用しています。
-  - 別リージョン（US 等）のワークスペースであれば、`ai-gw-demo-withgw` の `ai_gateway.guardrails`
-    に `pii`/`safety` を設定するだけで、ガードレールもネイティブ機能に置き換え可能です。
+### 設計上のポイント
+- **これら2エンドポイントは Unity Catalog の AI Gateway エンドポイント**（`endpoint_with_gw` /
+  `endpoint_no_gw`）で、**AI Gateway 統合ルート `/ai-gateway/mlflow/v1`** に対して
+  **カタログ修飾のモデル名**で呼び出します（OpenAI 互換）。classic の
+  `/serving-endpoints/{name}` パスや `serving-endpoints get` では見えません。
+- **安全性・ジェイルブレイクのガードレールはゲートウェイのネイティブ service policy**
+  （`gurdrail_unsafe_content` / `gurdrail_jail_break`）が担います。ブロック時は
+  `finish_reason=content_filter` と、`databricks_service_policy` に `name`/`reason` が入って返るため、
+  アプリはこれを検知してポリシー名と検知理由を表示します。
+- **PII マスクはアプリ層の `ai_mask`（SQL Warehouse 経由）で補完**します。上記ポリシーは PII を
+  対象としないため。安全性判定はゲートウェイに委譲し、アプリ側の `ai_query` 分類は廃止しました。
+- **アプリのサービスプリンシパルには、両エンドポイントへの `Can Query` 付与が必要**です
+  （エンドポイントの Permissions UI から付与）。付与がないとゲートウェイ呼び出しが 404 になります。
+- 補足: 旧構成の `external_model` 型エンドポイント（`ai-gw-demo-nogw` / `ai-gw-demo-withgw`, DAB管理）は
+  当リージョンでネイティブ guardrails が使えなかった時期の代替実装です。本デモはこの UC AI Gateway
+  エンドポイントを使用します（旧EPは未使用。`bundle destroy` で削除可）。
 
 ---
 
@@ -76,31 +81,24 @@ LLM / エージェントに対するガバナンスが **Unity AI Gateway の有
 | テーブル | `customers` | 顧客マスタ（PII含む・ダミー50件） |
 | テーブル | `support_tickets` | サポート問い合わせ履歴（120件） |
 | テーブル | `test_prompts` | アプリのクイック挿入プロンプト（通常/PII/ジェイルブレイク/不適切） |
-| テーブル | `app_request_log` | アプリが記録するライブ監査ログ |
-| テーブル | `withgw_audit_payload` | AI Gateway が自動生成する Inference Table |
+| テーブル | `app_request_log` | アプリが記録する監査ログ（withgw のみ） |
 | Job | `ai_gateway_demo データ生成` | 上記テーブルを生成 |
-| サービングEP | `ai-gw-demo-nogw` | ガバナンスなし |
-| サービングEP | `ai-gw-demo-withgw` | AI Gateway 適用（監査+レート制限） |
+| AI Gateway EP | `classic_stable_ytcy_catalog.ai_gateway_demo.endpoint_no_gw` | ガバナンスなし（UI で作成・DAB管理外） |
+| AI Gateway EP | `classic_stable_ytcy_catalog.ai_gateway_demo.endpoint_with_gw` | ネイティブ・ガードレール + レート制限（UI で作成・DAB管理外） |
 | App | `ai-gateway-demo` | React + FastAPI |
-| Secret | `ai_gateway_demo/fm_api_token` | FM API プロキシ用 PAT（DAB管理外・手動作成） |
+| (旧・未使用) | `ai-gw-demo-nogw` / `ai-gw-demo-withgw` | external_model 版。DAB管理だが本デモでは未使用 |
+| (旧・未使用) | Secret `ai_gateway_demo/fm_api_token` | 旧 external_model のプロキシ用 PAT |
 
 ---
 
 ## デプロイ手順
 
-### 前提（初回のみ・DAB管理外）
-FM API プロキシ用の PAT をシークレットに格納します。
-```bash
-export DATABRICKS_CLI_DO_NOT_EXECUTE_NEWER_VERSION=1
-P=fe-vm-classic-stable-ytcy
-# PAT 発行
-databricks tokens create --lifetime-seconds 7776000 --comment "ai_gateway_demo" --profile $P
-# シークレットスコープ + 格納（<TOKEN> は上記の token_value）
-databricks secrets create-scope ai_gateway_demo --profile $P
-databricks secrets put-secret ai_gateway_demo fm_api_token --string-value "<TOKEN>" --profile $P
-```
+### 前提
+- `endpoint_with_gw` / `endpoint_no_gw`（UC AI Gateway エンドポイント）が作成済みであること。
+  `endpoint_with_gw` にはネイティブ・ガードレール（`gurdrail_unsafe_content` /
+  `gurdrail_jail_break`）とレート制限が設定済み。
 
-### バンドルのデプロイ
+### バンドルのデプロイ（データ + アプリ）
 ```bash
 # フロントエンドをビルド（frontend/dist を生成 → デプロイ対象）
 cd app/frontend && npm install && npm run build && cd ../..
@@ -110,15 +108,14 @@ databricks bundle deploy -t dev
 databricks bundle run generate_data -t dev        # ダミーデータ生成
 databricks bundle run ai_gateway_demo_app -t dev  # アプリ起動（初回はコンピュート起動に数分）
 ```
+> ⚠️ `frontend/dist/` は .gitignore 対象。デプロイ/同期の直前に必ず `npm run build` すること。
 
-### アプリ サービスプリンシパルへの権限付与（DAB管理外）
-アプリの SP（`databricks apps get ai-gateway-demo` で確認）に以下を付与:
-- 両サービングエンドポイントに `CAN_QUERY`
+### アプリ サービスプリンシパルへの権限付与（必須）
+アプリの SP（`databricks apps get ai-gateway-demo` の `service_principal_client_id`）に付与:
+- **両 AI Gateway エンドポイントに `Can Query`**（各エンドポイントの Permissions UI から）
+  — これがないとゲートウェイ呼び出しが **404** になる
 - SQL Warehouse に `CAN_USE`
-- `GRANT USE CATALOG / USE SCHEMA / SELECT / MODIFY ON SCHEMA classic_stable_ytcy_catalog.ai_gateway_demo TO \`<sp-client-id>\``
-
-> pay-per-token の FM エンドポイント（`ai_query`/`ai_mask` が内部利用）はワークスペース
-> 既定でアクセス可能なため、個別付与は不要です。
+- `GRANT USE CATALOG / USE SCHEMA / SELECT / MODIFY ON SCHEMA classic_stable_ytcy_catalog.ai_gateway_demo TO \`<sp-client-id>\``（ai_mask と監査ログ書込用）
 
 ---
 
