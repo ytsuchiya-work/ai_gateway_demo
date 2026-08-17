@@ -21,3 +21,6 @@ app/frontend/dist/
 .idea/
 .vscode/
 *.swp
+
+# Local tooling
+.claude/

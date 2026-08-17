@@ -1,3 +1,0 @@
-2026-08-14 20:33:12,694 - mlflow.claude_code.tracing - CLAUDE_TRACING - Stop hook: session=5144f42f-ea34-4d3e-a50a-2e46b0aeaa7f, transcript=/Users/yusuke.tsuchiya/.claude/projects/-Users-yusuke-tsuchiya-Dev-sandbox/5144f42f-ea34-4d3e-a50a-2e46b0aeaa7f.jsonl
-2026-08-14 20:33:12,712 - mlflow.claude_code.tracing - CLAUDE_TRACING - Creating MLflow trace for session: 5144f42f-ea34-4d3e-a50a-2e46b0aeaa7f
-2026-08-14 20:33:17,736 - mlflow.claude_code.tracing - CLAUDE_TRACING - Created MLflow trace: tr-a098e193712767014df02c172d8c2496
