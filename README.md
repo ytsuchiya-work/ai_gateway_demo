@@ -21,13 +21,17 @@ LLM / エージェントに対するガバナンスが **Unity AI Gateway の有
 |---|---|---|
 | **安全性 (有害コンテンツ)** | モデル任せ（不確実） | AI Gateway ネイティブ・ガードレール `gurdrail_unsafe_content` でブロック |
 | **ジェイルブレイク/インジェクション** | モデル任せ | ネイティブ・ガードレール `gurdrail_jail_break` でブロック |
+| **PII 保護** | 素通り | ネイティブ・ガードレール `gurdrail_custom_PII` でブロック |
 | **トラフィック制御** | 無制限 | AI Gateway レート制限 → 超過は HTTP 429 |
-| **PII 保護 (入出力)** | 素通り | `ai_mask` で氏名/電話/カード/メール/住所をマスク（補完） |
 | **監査性** | 記録なし・追跡不能 | 全リクエスト(入力/判定/応答/tok/遅延)を監査ログに自動記録 |
 
-> 安全性・ジェイルブレイクは **AI Gateway のネイティブ service policy** がゲートウェイでブロックします
-> (ブロック時は `finish_reason=content_filter` と `databricks_service_policy{name,reason}` が返る)。
-> PII マスクはこれらのポリシーが対象外のため、Databricks AI Function `ai_mask` で補完します。
+> 有害コンテンツ・ジェイルブレイク・PII はすべて **AI Gateway のネイティブ service policy**
+> (`gurdrail_unsafe_content` / `gurdrail_jail_break` / `gurdrail_custom_PII`) がゲートウェイでブロックします。
+> ブロック時は `finish_reason=content_filter` と `databricks_service_policy{name,reason}` が返り、
+> アプリはポリシー名と検知理由を表示します。アプリ側の `ai_mask` / `ai_query` は使用しない完全ネイティブ構成です。
+>
+> ⚠️ これらは LLM 判定ポリシーのため発火は**文脈依存（非決定的）**です。同じ PII 文でもブロックされたり
+> 通過したりします。デモで確実にブロックを見せるには「PII: カード番号照会」等の明確に機微な要求が有効です。
 
 ### 画面（5 タブ）
 1. **チャット** — トグルで挙動比較。応答にガードレール判定バッジ（安全性・PIIマスク・監査記録）を表示。
@@ -47,10 +51,9 @@ LLM / エージェントに対するガバナンスが **Unity AI Gateway の有
    │   model = カタログ修飾名
    ├─ nogw  → classic_stable_ytcy_catalog.ai_gateway_demo.endpoint_no_gw   (ガードレール/制限なし)
    └─ withgw→ classic_stable_ytcy_catalog.ai_gateway_demo.endpoint_with_gw
-                    ├─ ネイティブ service policy: gurdrail_unsafe_content / gurdrail_jail_break
+                    ├─ ネイティブ service policy: gurdrail_unsafe_content /
+                    │                             gurdrail_jail_break / gurdrail_custom_PII
                     └─ レート制限 (AI Gateway)
-   withgw の PII マスク (アプリ層で補完):
-     └─ ai_mask   … 入力/出力の PII マスク (氏名/電話/カード/メール/住所)
    監査: withgw の各リクエストを app_request_log に記録
 ```
 
@@ -59,12 +62,13 @@ LLM / エージェントに対するガバナンスが **Unity AI Gateway の有
   `endpoint_no_gw`）で、**AI Gateway 統合ルート `/ai-gateway/mlflow/v1`** に対して
   **カタログ修飾のモデル名**で呼び出します（OpenAI 互換）。classic の
   `/serving-endpoints/{name}` パスや `serving-endpoints get` では見えません。
-- **安全性・ジェイルブレイクのガードレールはゲートウェイのネイティブ service policy**
-  （`gurdrail_unsafe_content` / `gurdrail_jail_break`）が担います。ブロック時は
-  `finish_reason=content_filter` と、`databricks_service_policy` に `name`/`reason` が入って返るため、
-  アプリはこれを検知してポリシー名と検知理由を表示します。
-- **PII マスクはアプリ層の `ai_mask`（SQL Warehouse 経由）で補完**します。上記ポリシーは PII を
-  対象としないため。安全性判定はゲートウェイに委譲し、アプリ側の `ai_query` 分類は廃止しました。
+- **有害コンテンツ・ジェイルブレイク・PII のガードレールはすべてゲートウェイのネイティブ
+  service policy**（`gurdrail_unsafe_content` / `gurdrail_jail_break` / `gurdrail_custom_PII`）が
+  担います。ブロック時は `finish_reason=content_filter` と、`databricks_service_policy` に
+  `name`/`reason` が入って返るため、アプリはこれを検知してポリシー名と検知理由を表示します。
+  **アプリ側の `ai_mask` / `ai_query` は使用しません**（完全ネイティブ構成）。
+- これらは LLM 判定ポリシーのため**発火は文脈依存（非決定的）**です。明確に機微・危険な要求は
+  ブロックされ、正当な問い合わせは通過します（同じ文でも実行ごとに結果が変わり得ます）。
 - **アプリのサービスプリンシパルには、両エンドポイントへの `Can Query` 付与が必要**です
   （エンドポイントの Permissions UI から付与）。付与がないとゲートウェイ呼び出しが 404 になります。
 - 補足: 旧構成の `external_model` 型エンドポイント（`ai-gw-demo-nogw` / `ai-gw-demo-withgw`, DAB管理）は
@@ -115,7 +119,7 @@ databricks bundle run ai_gateway_demo_app -t dev  # アプリ起動（初回は�
 - **両 AI Gateway エンドポイントに `Can Query`**（各エンドポイントの Permissions UI から）
   — これがないとゲートウェイ呼び出しが **404** になる
 - SQL Warehouse に `CAN_USE`
-- `GRANT USE CATALOG / USE SCHEMA / SELECT / MODIFY ON SCHEMA classic_stable_ytcy_catalog.ai_gateway_demo TO \`<sp-client-id>\``（ai_mask と監査ログ書込用）
+- `GRANT USE CATALOG / USE SCHEMA / SELECT / MODIFY ON SCHEMA classic_stable_ytcy_catalog.ai_gateway_demo TO \`<sp-client-id>\``（test_prompts 読取・監査ログ書込用）
 
 ---
 
