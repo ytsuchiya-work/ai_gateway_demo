@@ -41,7 +41,7 @@ export default function Overview() {
             <div className="node llm">LLM エンドポイント</div>
           </div>
           <div className="arch-note on">
-            全リクエストを記録・レート制限・PIIマスク・安全性フィルタ
+            全リクエストを記録・レート制限・有害/PII/ジェイルブレイクをネイティブ遮断
           </div>
         </div>
       </div>
@@ -54,7 +54,7 @@ export default function Overview() {
           <tr><td>安全性 (有害コンテンツ)</td><td className="no">✗ モデル任せ (不確実)</td><td className="yes">✓ ネイティブGWガードレール gurdrail_unsafe_content でブロック</td></tr>
           <tr><td>ジェイルブレイク / インジェクション</td><td className="no">✗ モデル任せ</td><td className="yes">✓ ネイティブGWガードレール gurdrail_jail_break でブロック</td></tr>
           <tr><td>トラフィック制御</td><td className="no">✗ 無制限</td><td className="yes">✓ レート制限 (GW適用)</td></tr>
-          <tr><td>PII 保護 (入出力)</td><td className="no">✗ 素通り</td><td className="yes">✓ ai_mask でマスク (補完)</td></tr>
+          <tr><td>PII 保護</td><td className="no">✗ 素通り</td><td className="yes">✓ ネイティブGWガードレール gurdrail_custom_PII でブロック</td></tr>
           <tr><td>監査性 (誰が/何を/いつ)</td><td className="no">✗ 追跡不能</td><td className="yes">✓ 監査ログに自動記録</td></tr>
         </tbody>
       </table>
@@ -71,17 +71,18 @@ export default function Overview() {
             <div className="cfg-box on">
               <h4><code>{cfg.withgw?.name}</code></h4>
               <ul>
-                <li>ネイティブ・ガードレール: {(cfg.withgw?.guardrails || []).map((g: string) => <code key={g}>{g} </code>)}</li>
+                <li>ネイティブ・ガードレール:
+                  <ul>{(cfg.withgw?.guardrails || []).map((g: string) => <li key={g}><code>{g}</code></li>)}</ul>
+                </li>
                 <li>レート制限: <b>{cfg.withgw?.rate_limit ? "適用あり" : "-"}</b></li>
-                <li>PIIマスク: <b>{cfg.withgw?.pii_mask}</b></li>
               </ul>
             </div>
           </div>
           <p className="muted small">
             呼び出しは AI Gateway 統合ルート <code>{cfg.gateway_route}</code> 経由、
-            モデルはカタログ修飾名で指定します。安全性・ジェイルブレイクは
-            <b> AI Gateway のネイティブ service policy</b> がブロックし、PII は Databricks AI Function
-            <code> ai_mask</code> で補完的にマスクします。
+            モデルはカタログ修飾名で指定します。有害コンテンツ・ジェイルブレイク・PII は
+            すべて <b>AI Gateway のネイティブ service policy</b> がゲートウェイでブロックします
+            (アプリ側の ai_mask / ai_query は不使用の完全ネイティブ構成)。
           </p>
         </div>
       )}

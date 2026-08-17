@@ -64,10 +64,10 @@ export default function Chat({ mode, setMode }: { mode: Mode; setMode: (m: Mode)
         <div className={`mode-banner ${on ? "on" : "off"}`}>
           <div className="mb-head">{on ? "🛡️ ガバナンスあり" : "⚠️ ガバナンスなし"}</div>
           <ul>
-            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} 安全性/ジェイルブレイク (ネイティブGWガードレール)</li>
-            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} レート制限 (GW適用)</li>
-            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} PIIマスク (ai_mask)</li>
-            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} 監査ログ (自動記録)</li>
+            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} 有害コンテンツ遮断 (gurdrail_unsafe_content)</li>
+            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} ジェイルブレイク遮断 (gurdrail_jail_break)</li>
+            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} PII保護 (gurdrail_custom_PII)</li>
+            <li className={on ? "yes" : "no"}>{on ? "✓" : "✗"} レート制限 / 監査ログ (GW適用)</li>
           </ul>
           <button className="mode-switch-btn" onClick={() => setMode(on ? "nogw" : "withgw")}>
             {on ? "ガバナンスを無効化" : "ガバナンスを有効化"}
@@ -153,8 +153,6 @@ function Badges({ resp }: { resp: ChatResp }) {
       ) : (
         <span className="badge green">✓ ガードレール通過</span>
       )}
-      {g.pii_input_masked && <span className="badge amber">入力PIIマスク</span>}
-      {g.pii_output_masked && <span className="badge amber">出力PIIマスク</span>}
       {g.logged && <span className="badge blue">📋 監査記録: {g.request_id}</span>}
       {m && m.latency_ms > 0 && <span className="badge dim">{m.latency_ms}ms · {m.output_tokens}tok</span>}
       {g.blocked && g.policy_reason && (

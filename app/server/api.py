@@ -1,16 +1,20 @@
 """デモ API ルーター。
 
 ガバナンスあり = Unity AI Gateway エンドポイント endpoint_with_gw
-  - ネイティブ service policy ガードレール (安全性 gurdrail_unsafe_content /
-    ジェイルブレイク gurdrail_jail_break) がゲートウェイでブロック
+  - ネイティブ service policy ガードレール (すべてゲートウェイ側でブロック):
+      gurdrail_unsafe_content (有害コンテンツ) /
+      gurdrail_jail_break (ジェイルブレイク/インジェクション) /
+      gurdrail_custom_PII (PII を含む要求)
   - レート制限もゲートウェイで適用
-  - PII マスクはアプリ層の ai_mask で補完
 ガバナンスなし = endpoint_no_gw (ガードレール・レート制限なし)
+
+安全性・PII・ジェイルブレイクはすべてゲートウェイのネイティブポリシーが担うため、
+アプリ層の ai_mask / ai_query は使用しない (完全ネイティブ)。
 """
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from . import config, llm, guardrails, audit
+from . import config, llm, audit
 from .sql import run_sql
 
 router = APIRouter()
@@ -42,9 +46,8 @@ def gateway_config():
         "withgw": {
             "name": config.WITHGW_MODEL,
             "has_gateway": True,
-            "guardrails": ["gurdrail_unsafe_content", "gurdrail_jail_break"],
+            "guardrails": ["gurdrail_unsafe_content", "gurdrail_jail_break", "gurdrail_custom_PII"],
             "rate_limit": True,
-            "pii_mask": "ai_mask (アプリ層で補完)",
         },
         "gateway_route": config.gateway_url(),
     }
@@ -78,13 +81,9 @@ def _chat_nogw(message: str) -> dict:
 
 
 def _chat_withgw(message: str) -> dict:
-    """ガバナンスあり: PIIマスク(ai_mask) → ゲートウェイ(ネイティブガードレール) → 出力マスク → 監査。"""
-    # 入力 PII マスク (ai_mask)
-    gin = guardrails.mask_text(message)
-    llm_input = gin["masked_text"] if gin["pii_detected"] else message
-
+    """ガバナンスあり: 生入力をゲートウェイへ → ネイティブ service policy が判定 → 監査。"""
     try:
-        res = llm.invoke(config.WITHGW_MODEL, llm_input)
+        res = llm.invoke(config.WITHGW_MODEL, message)
     except llm.RateLimited:
         return {"rate_limited": True, "mode": "withgw"}
 
@@ -95,16 +94,13 @@ def _chat_withgw(message: str) -> dict:
         pname = (policy or {}).get("name", "guardrail")
         preason = (policy or {}).get("reason", "")
         response = f"⛔ AI Gateway のガードレール『{pname}』によりブロックされました。"
-        masked_out_flag = False
         verdict = pname
         action = "blocked"
     else:
-        gout = guardrails.mask_text(res["content"])
-        response = gout["masked_text"]
-        masked_out_flag = gout["pii_detected"]
+        response = res["content"]
         verdict = "safe"
         preason = ""
-        action = "masked" if (gin["pii_detected"] or masked_out_flag) else "allowed"
+        action = "allowed"
 
     metrics = {
         "input_tokens": res["input_tokens"],
@@ -118,7 +114,7 @@ def _chat_withgw(message: str) -> dict:
             "mode": "withgw",
             "endpoint": config.WITHGW_MODEL.split(".")[-1],
             "user_input": message,
-            "masked_input": gin["masked_text"],
+            "masked_input": message,
             "safety_verdict": verdict,
             "action": action,
             "model_output": response,
@@ -140,9 +136,6 @@ def _chat_withgw(message: str) -> dict:
             "blocked": blocked,
             "policy_name": (policy or {}).get("name") if blocked else None,
             "policy_reason": preason if blocked else None,
-            "pii_input_masked": gin["pii_detected"],
-            "pii_output_masked": masked_out_flag,
-            "masked_input": gin["masked_text"],
             "action": action,
             "logged": request_id is not None,
             "request_id": request_id,

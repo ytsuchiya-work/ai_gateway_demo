@@ -36,9 +36,10 @@ export default function Guardrails() {
           <h2>入出力管理 (ガードレール)</h2>
           <p className="muted">
             同じ入力を <b>ガバナンスなし(endpoint_no_gw)</b> と <b>ガバナンスあり(endpoint_with_gw)</b>
-            の両方へ同時送信し、違いを並べて比較します。安全性・ジェイルブレイクは
-            <b>AI Gateway のネイティブ・ガードレール(service policy)</b> がブロックし、
-            PII は <code>ai_mask</code> で補完的にマスクします。
+            の両方へ同時送信し、違いを並べて比較します。有害コンテンツ・ジェイルブレイク・PII は
+            すべて <b>AI Gateway のネイティブ service policy</b>
+            (<code>gurdrail_unsafe_content</code> / <code>gurdrail_jail_break</code> /
+            <code>gurdrail_custom_PII</code>) がゲートウェイでブロックします。
           </p>
         </div>
       </div>
@@ -83,16 +84,7 @@ function Side({ title, cls, resp, raw }: { title: string; cls: string; resp: Cha
         <>
           <div className="step">
             <div className="step-lbl">① 入力</div>
-            <div className="step-box">
-              {g?.enabled && g.pii_input_masked ? (
-                <>
-                  <div className="line-through">{raw}</div>
-                  <div className="masked">↓ PIIマスク後: {g.masked_input}</div>
-                </>
-              ) : (
-                <div>{raw}</div>
-              )}
-            </div>
+            <div className="step-box"><div>{raw}</div></div>
           </div>
           <div className="step">
             <div className="step-lbl">② ゲートウェイ・ガードレール</div>
