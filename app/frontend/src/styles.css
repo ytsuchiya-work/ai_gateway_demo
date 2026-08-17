@@ -203,6 +203,26 @@ h3 { font-size: 15px; margin: 22px 0 10px; }
 .lg.ok::before { background: var(--green); }
 .lg.blocked::before { background: var(--db-red); }
 .lg.err::before { background: var(--gray); }
+.probe-prompt { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+/* live request/response log */
+.live-log { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 12px 0; }
+.log-row { display: grid; grid-template-columns: 48px 150px 1fr 70px; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid #f0f3f4; font-size: 12.5px; }
+.log-row:last-child { border-bottom: none; }
+.log-row.head { background: #f6f8f9; font-weight: 700; color: var(--muted); position: sticky; top: 0; }
+.log-row.sending { opacity: 0.65; }
+.log-row.ok { background: #f4fbf8; }
+.log-row.blocked { background: var(--red-bg); }
+.log-row.policy { background: var(--amber-bg); }
+.log-i { font-family: "SF Mono", Menlo, monospace; font-weight: 700; color: var(--muted); }
+.log-status { font-weight: 700; font-size: 11.5px; }
+.log-status.ok { color: var(--green); }
+.log-status.blocked { color: var(--db-red); }
+.log-status.policy { color: var(--amber); }
+.log-status.sending { color: var(--muted); }
+.log-status.err { color: var(--gray); }
+.log-resp { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-lat { font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; color: var(--muted); text-align: right; }
 
 /* ---------- Guardrails compare ---------- */
 .gr-prompts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }

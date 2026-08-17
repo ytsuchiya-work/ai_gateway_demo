@@ -66,4 +66,9 @@ export const api = {
   audit: () => get<{ summary: { withgw: number; nogw: number }; rows: AuditRow[] }>("/api/audit"),
   rateTest: (mode: Mode, count: number) =>
     post<any>("/api/ratelimit-test", { mode, count }),
+  rateOne: (mode: Mode) =>
+    post<{ prompt: string; code: number; content: string; latency_ms: number; policy: string | null }>(
+      "/api/ratelimit-one",
+      { mode }
+    ),
 };

@@ -149,6 +149,29 @@ def audit_log():
     return {"summary": audit.audit_summary(), "rows": audit.list_requests(50)}
 
 
+# トラフィック制御デモ用の probe。全ガードレール(PII/有害/JB/hallucination)を通過し、
+# 実際の応答が返る無害な挨拶にする(レート制限のみを可視化するため)。
+PROBE_PROMPT = "「こんにちは」と短く挨拶を返してください。"
+
+
+class RateOneReq(BaseModel):
+    mode: str
+
+
+@router.post("/ratelimit-one")
+def ratelimit_one(req: RateOneReq):
+    """トラフィック制御デモ用: 1リクエストを送り、ステータス・応答・遅延を返す。"""
+    model = config.WITHGW_MODEL if req.mode == "withgw" else config.NOGW_MODEL
+    res = llm.invoke_probe(model, PROBE_PROMPT)
+    return {
+        "prompt": PROBE_PROMPT,
+        "code": res["code"],
+        "content": res["content"],
+        "latency_ms": res["latency_ms"],
+        "policy": res["policy"],
+    }
+
+
 class RateReq(BaseModel):
     mode: str
     count: int = 20

@@ -87,3 +87,42 @@ def invoke_status(model: str) -> int:
         return r.status_code
     except Exception:
         return 0
+
+
+def invoke_probe(model: str, message: str) -> dict:
+    """トラフィック制御デモ用: 1リクエストのステータス・応答・遅延を返す(例外を投げない)。
+
+    戻り値: {code, content, latency_ms, policy}
+      code=200: 通常応答(content) または ガードレールブロック(policy)
+      code=429: レート制限
+    """
+    url = f"{config.gateway_url()}/chat/completions"
+    token = config.get_token()
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": message}],
+        "max_tokens": 80,
+        "temperature": 0,
+    }
+    import time as _t
+    t0 = _t.time()
+    try:
+        with httpx.Client(timeout=40.0) as client:
+            r = client.post(url, headers={"Authorization": f"Bearer {token}"}, json=payload)
+    except Exception as e:
+        return {"code": 0, "content": f"error: {e}", "latency_ms": int((_t.time() - t0) * 1000), "policy": None}
+    latency_ms = int((_t.time() - t0) * 1000)
+    if r.status_code != 200:
+        return {"code": r.status_code, "content": r.text[:200], "latency_ms": latency_ms, "policy": None}
+    try:
+        d = r.json()
+    except Exception:
+        return {"code": 200, "content": r.text[:200], "latency_ms": latency_ms, "policy": None}
+    choice = (d.get("choices") or [{}])[0]
+    policy = d.get("databricks_service_policy")
+    return {
+        "code": 200,
+        "content": choice.get("message", {}).get("content", ""),
+        "latency_ms": latency_ms,
+        "policy": (policy or {}).get("name"),
+    }
